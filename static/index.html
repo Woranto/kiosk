@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>카페 키오스크</title>
+<style>
+  :root {
+    --bg: #f6f1ea; --brown: #4a2f1d; --accent: #c8782a; --card: #fff;
+    --gray: #9b9b9b; --green: #2f8f5b; --red: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    background: var(--bg); color: var(--brown); user-select: none; -webkit-user-select: none;
+  }
+  button { font: inherit; border: 0; cursor: pointer; border-radius: 14px; }
+  button:disabled { cursor: not-allowed; }
+  .screen { display: none; height: 100%; }
+  .screen.active { display: flex; }
+  .center { flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 18px; padding: 24px; }
+  .big { background: var(--accent); color: #fff; font-weight: 700; font-size: 1.6rem; padding: 36px 40px; min-width: 260px; }
+  .big.dark { background: var(--brown); }
+  .big.gray { background: var(--gray); font-size: 1.1rem; padding: 14px 28px; min-width: 0; }
+  .big:disabled { background: var(--gray); }
+  .row { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+
+  /* 시작 */
+  .logo { font-size: 4rem; font-weight: 800; margin: 0; }
+  .sub { color: var(--gray); font-size: 1.5rem; margin: 0 0 30px; }
+
+  /* 주문 */
+  #order { flex-direction: column; }
+  header { background: var(--brown); color: #fff; display: flex; justify-content: space-between; align-items: center; padding: 14px 24px; }
+  header h2 { margin: 0; font-size: 1.5rem; }
+  header button { background: transparent; color: #fff; font-size: 1rem; font-weight: 700; }
+  .body { flex: 1; display: grid; grid-template-columns: 3fr 2fr; gap: 16px; padding: 14px 16px; min-height: 0; }
+  .left { display: flex; flex-direction: column; min-height: 0; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .tab { background: var(--card); color: var(--brown); font-weight: 700; font-size: 1.2rem; padding: 10px 26px; }
+  .tab.active { background: var(--accent); color: #fff; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; overflow-y: auto; align-content: start; }
+  .item { background: var(--card); color: var(--brown); font-weight: 700; font-size: 1.2rem; padding: 34px 8px; line-height: 1.8; }
+  .item:active:not(:disabled) { transform: scale(.97); }
+  .item:disabled { background: #e4e0da; color: var(--gray); }
+  .cart { background: var(--card); border-radius: 14px; display: flex; flex-direction: column; padding: 14px 16px; min-height: 0; }
+  .cart h3 { margin: 0 0 8px; font-size: 1.3rem; }
+  .lines { flex: 1; overflow-y: auto; }
+  .empty { color: var(--gray); text-align: center; margin-top: 60px; font-size: 1.1rem; }
+  .line { padding: 8px 0; border-bottom: 1px solid #eee; }
+  .line .top { display: flex; justify-content: space-between; font-weight: 700; }
+  .qty { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+  .qty button { background: #ece7e0; width: 44px; height: 38px; font-size: 1.3rem; font-weight: 700; color: var(--brown); }
+  .qty span { width: 40px; text-align: center; font-weight: 700; font-size: 1.1rem; }
+  .total { text-align: right; font-size: 1.5rem; font-weight: 800; margin: 12px 0; }
+  .actions { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
+  .actions button { padding: 18px 8px; font-size: 1.2rem; font-weight: 700; color: #fff; white-space: nowrap; }
+  #clear { background: var(--gray); }
+  #goPay { background: var(--accent); }
+  #goPay:disabled { background: var(--gray); }
+
+  /* 결제 */
+  #payLines { font-size: 1.2rem; color: var(--gray); line-height: 1.8; }
+  #payTotal { font-size: 2.2rem; font-weight: 800; color: var(--accent); margin-bottom: 20px; }
+  #payStatus { min-height: 2rem; font-size: 1.3rem; font-weight: 700; color: var(--green); }
+  #payStatus.error { color: var(--red); }
+
+  /* 완료 */
+  .check { font-size: 5rem; color: var(--green); line-height: 1; }
+  #doneNumber { font-size: 3.4rem; font-weight: 800; color: var(--accent); }
+
+  #toast { position: fixed; left: 50%; bottom: 6%; transform: translateX(-50%); background: var(--brown); color: #fff;
+           padding: 12px 24px; border-radius: 12px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  #toast.show { opacity: 1; }
+
+  @media (max-width: 760px) {
+    .body { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+    .grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<section id="welcome" class="screen center active">
+  <h1 class="logo">☕ CAFE</h1>
+  <p class="sub">주문 방법을 선택해주세요</p>
+  <div class="row">
+    <button class="big" data-dine="true">매장에서<br>먹고 가기</button>
+    <button class="big dark" data-dine="false">포장해서<br>가기</button>
+  </div>
+</section>
+
+<section id="order" class="screen">
+  <header>
+    <h2>메뉴를 선택해주세요</h2>
+    <button id="home">처음으로</button>
+  </header>
+  <div class="body">
+    <div class="left">
+      <div class="tabs" id="tabs"></div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <div class="cart">
+      <h3>주문 내역</h3>
+      <div class="lines" id="lines"></div>
+      <div class="total" id="total">합계 0원</div>
+      <div class="actions">
+        <button id="clear">전체 삭제</button>
+        <button id="goPay">결제하기</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pay" class="screen center">
+  <h1>결제 방법을 선택해주세요</h1>
+  <div id="payLines"></div>
+  <div id="payTotal"></div>
+  <div class="row">
+    <button class="big pay-btn" data-method="카드">💳 카드 결제</button>
+    <button class="big dark pay-btn" data-method="현금">💵 현금 결제</button>
+  </div>
+  <div id="payStatus"></div>
+  <button class="big gray pay-btn" id="back">← 주문으로 돌아가기</button>
+</section>
+
+<section id="done" class="screen center">
+  <div class="check">✔</div>
+  <h1>주문이 완료되었습니다</h1>
+  <div id="doneNumber"></div>
+  <div id="doneInfo" style="color:var(--gray);font-size:1.2rem"></div>
+  <p style="font-size:1.2rem">번호가 호출되면 카운터에서 받아가세요</p>
+  <button class="big" id="doneOk" style="padding:16px 40px;min-width:0;font-size:1.3rem">확인</button>
+</section>
+
+<div id="toast"></div>
+
+<script>
+const IDLE_MS = 60_000;   // 무입력 시 첫 화면으로
+const DONE_MS = 6_000;    // 완료 화면 유지 시간
+
+let menu = { items: [], categories: [], max_quantity: 5 };
+let cart = {};            // menu_id -> 수량
+let dineIn = true;
+let category = null;
+let paying = false;
+let idleTimer = null, doneTimer = null, toastTimer = null;
+
+const $ = (id) => document.getElementById(id);
+const won = (n) => n.toLocaleString("ko-KR") + "원";
+const byId = (id) => menu.items.find((m) => m.id === id);
+const total = () => Object.entries(cart).reduce((s, [id, q]) => s + byId(id).price * q, 0);
+
+function el(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+}
+
+function show(name) {
+  document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("active", s.id === name));
+  resetIdle();
+}
+
+function resetIdle() {
+  clearTimeout(idleTimer);
+  const active = document.querySelector(".screen.active").id;
+  if (active === "order" || active === "pay") idleTimer = setTimeout(goHome, IDLE_MS);
+}
+
+function goHome() {
+  if (paying) return;
+  clearTimeout(doneTimer);
+  cart = {};
+  category = menu.categories[0];
+  show("welcome");
+}
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+}
+
+async function loadMenu() {
+  const res = await fetch("/api/menu");
+  menu = await res.json();
+  category = category ?? menu.categories[0];
+}
+
+/* ---------- 주문 화면 ---------- */
+function renderMenu() {
+  $("tabs").replaceChildren(...menu.categories.map((c) =>
+    el("button", {
+      className: "tab" + (c === category ? " active" : ""), textContent: c,
+      onclick: () => { category = c; renderMenu(); },
+    })));
+  $("grid").replaceChildren(...menu.items.filter((m) => m.category === category).map((m) =>
+    el("button", { className: "item", disabled: m.sold_out, onclick: () => addItem(m.id) },
+      m.name, el("br"), m.sold_out ? "품절" : won(m.price))));
+}
+
+function addItem(id) { changeQty(id, 1); }
+
+function changeQty(id, delta) {
+  const qty = (cart[id] || 0) + delta;
+  if (qty > menu.max_quantity) return toast(`메뉴당 최대 ${menu.max_quantity}개까지 주문할 수 있어요`);
+  if (qty <= 0) delete cart[id]; else cart[id] = qty;
+  renderCart();
+}
+
+function renderCart() {
+  const entries = Object.entries(cart);
+  if (!entries.length) {
+    $("lines").replaceChildren(el("div", { className: "empty", textContent: "메뉴를 눌러 담아주세요" }));
+  } else {
+    $("lines").replaceChildren(...entries.map(([id, qty]) => {
+      const m = byId(id);
+      return el("div", { className: "line" },
+        el("div", { className: "top" }, el("span", { textContent: m.name }), el("span", { textContent: won(m.price * qty) })),
+        el("div", { className: "qty" },
+          el("button", { textContent: "−", onclick: () => changeQty(id, -1) }),
+          el("span", { textContent: qty }),
+          el("button", { textContent: "+", onclick: () => changeQty(id, 1) })));
+    }));
+  }
+  $("total").textContent = "합계 " + won(total());
+  $("goPay").disabled = !entries.length;
+}
+
+/* ---------- 결제 ---------- */
+function setPayDisabled(disabled) {
+  document.querySelectorAll(".pay-btn").forEach((b) => (b.disabled = disabled));
+}
+
+function goPay() {
+  $("payLines").replaceChildren(...Object.entries(cart).map(([id, q]) =>
+    el("div", { textContent: `${byId(id).name} × ${q}` })));
+  $("payTotal").textContent = "총 " + won(total());
+  setStatus("");
+  setPayDisabled(false);
+  show("pay");
+}
+
+function setStatus(msg, error = false) {
+  $("payStatus").textContent = msg;
+  $("payStatus").classList.toggle("error", error);
+}
+
+async function pay(method) {
+  if (paying) return;
+  paying = true;
+  setPayDisabled(true);
+  setStatus(method === "카드" ? "카드를 투입구에 넣어주세요..." : "카운터에서 결제해주세요...");
+  await new Promise((r) => setTimeout(r, 2000));   // 실제 결제 단말기 연동 지점
+  try {
+    const res = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dine_in: dineIn, payment: method,
+        items: Object.entries(cart).map(([menu_id, quantity]) => ({ menu_id, quantity })),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "주문을 처리하지 못했어요.");
+    $("doneNumber").textContent = "주문번호 " + data.number;
+    $("doneInfo").textContent = `${data.type} · ${data.payment} · ${won(data.total)}`;
+    cart = {};
+    show("done");
+    doneTimer = setTimeout(goHome, DONE_MS);
+  } catch (e) {
+    setStatus(e.message || "결제에 실패했어요. 다시 시도해주세요.", true);
+    setPayDisabled(false);
+    await loadMenu().catch(() => {});   // 품절 등 최신 상태 반영
+  } finally {
+    paying = false;
+  }
+}
+
+/* ---------- 이벤트 ---------- */
+document.querySelectorAll("[data-dine]").forEach((b) => b.addEventListener("click", async () => {
+  dineIn = b.dataset.dine === "true";
+  cart = {};
+  try { await loadMenu(); } catch { return toast("서버에 연결할 수 없어요"); }
+  renderMenu(); renderCart(); show("order");
+}));
+$("home").onclick = goHome;
+$("clear").onclick = () => { cart = {}; renderCart(); };
+$("goPay").onclick = goPay;
+$("back").onclick = () => { renderMenu(); renderCart(); show("order"); };
+$("doneOk").onclick = goHome;
+document.querySelectorAll("[data-method]").forEach((b) => b.addEventListener("click", () => pay(b.dataset.method)));
+["pointerdown", "keydown"].forEach((ev) => document.addEventListener(ev, resetIdle));
+document.addEventListener("contextmenu", (e) => e.preventDefault());
+</script>
+</body>
+</html>
